@@ -1,38 +1,89 @@
-deploy:
-  name: Deploy to ECS
-  needs: build
-  runs-on: ubuntu-latest
+name: CI-CD Pipeline
 
-  steps:
-    # ✅ Checkout repository in this job
-    - name: Checkout repository
-      uses: actions/checkout@v4
+# Permissions for OIDC and repo access
+permissions:
+  id-token: write
+  contents: read
 
-    # ✅ Configure AWS credentials
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v3
-      with:
-        role-to-assume: arn:aws:iam::282378667470:role/GitHubActionsECRRole
-        aws-region: us-west-2
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:   # allows manual trigger
 
-    # ✅ Debug: verify template exists
-    - name: List repo contents
-      run: |
-        echo "Root folder:"
-        ls -la
-        echo "infra folder:"
-        ls -la infra
-        if [ ! -f infra/ecs-service.yml ]; then
-          echo "ERROR: ecs-service.yml not found"
-          exit 1
-        fi
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-    # ✅ Deploy CloudFormation
-    - name: Deploy CloudFormation stack
-      run: |
-        IMAGE_URI=282378667470.dkr.ecr.us-west-2.amazonaws.com/slack-cicd-demo:${{ github.sha }}
-        aws cloudformation deploy \
-          --stack-name slack-cicd-stack \
-          --template-file infra/ecs-service.yml \
-          --capabilities CAPABILITY_NAMED_IAM \
-          --parameter-overrides ContainerImage=$IMAGE_URI
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build Docker image locally
+        run: docker build -t slack-cicd-demo .
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: arn:aws:iam::282378667470:role/GitHubActionsECRRole
+          aws-region: us-west-2
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region us-west-2 | \
+          docker login --username AWS --password-stdin 282378667470.dkr.ecr.us-west-2.amazonaws.com
+
+      - name: Build, Tag, and Push image to ECR
+        run: |
+          IMAGE_URI=282378667470.dkr.ecr.us-west-2.amazonaws.com/slack-cicd-demo:${{ github.sha }}
+          docker build -t $IMAGE_URI .
+          docker push $IMAGE_URI
+
+  deploy:
+    name: Deploy to ECS
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      # ✅ Checkout repo so infra/ecs-service.yml exists
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ✅ Configure AWS credentials
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: arn:aws:iam::282378667470:role/GitHubActionsECRRole
+          aws-region: us-west-2
+
+      # ✅ Debug: verify template exists
+      - name: Verify infra folder
+        run: |
+          echo "Listing root folder:"
+          ls -la
+          echo "Listing infra folder:"
+          ls -la infra
+          if [ ! -f infra/ecs-service.yml ]; then
+            echo "ERROR: infra/ecs-service.yml not found"
+            exit 1
+          fi
+
+      # ✅ Deploy CloudFormation stack
+      - name: Deploy CloudFormation stack
+        run: |
+          IMAGE_URI=282378667470.dkr.ecr.us-west-2.amazonaws.com/slack-cicd-demo:${{ github.sha }}
+          aws cloudformation deploy \
+            --stack-name slack-cicd-stack \
+            --template-file infra/ecs-service.yml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides ContainerImage=$IMAGE_URI
