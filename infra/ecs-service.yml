@@ -75,10 +75,15 @@ jobs:
           aws-region: us-west-2
 
       - name: Deploy CloudFormation stack
-        run: |
-          IMAGE_URI=282378667470.dkr.ecr.us-west-2.amazonaws.com/slack-cicd-demo:${{ github.sha }}
-          aws cloudformation deploy \
-            --stack-name slack-cicd-stack \
-            --template-file infra/ecs-service.yml \
-            --capabilities CAPABILITY_NAMED_IAM \
-            --parameter-overrides ContainerImage=$IMAGE_URI
+  run: |
+    if [ -f infra/ecs-service.yml ]; then
+      IMAGE_URI=282378667470.dkr.ecr.us-west-2.amazonaws.com/slack-cicd-demo:${{ github.sha }}
+      aws cloudformation deploy \
+        --stack-name slack-cicd-stack \
+        --template-file infra/ecs-service.yml \
+        --capabilities CAPABILITY_NAMED_IAM \
+        --parameter-overrides ContainerImage=$IMAGE_URI
+    else
+      echo "ecs-service.yml not found. Skipping deploy."
+    fi
+
