@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -58,6 +60,8 @@ jobs:
       # ✅ Checkout repo so infra/ecs-service.yml exists
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # ✅ Configure AWS credentials
       - name: Configure AWS credentials
@@ -67,14 +71,15 @@ jobs:
           aws-region: us-west-2
 
       # ✅ Debug: verify template exists
-      - name: Verify infra folder
+      - name: Debug repo files
         run: |
-          echo "Listing root folder:"
+          echo "Current directory: $(pwd)"
+          echo "Root files:"
           ls -la
-          echo "Listing infra folder:"
+          echo "Infra folder contents:"
           ls -la infra
           if [ ! -f infra/ecs-service.yml ]; then
-            echo "ERROR: infra/ecs-service.yml not found"
+            echo "ERROR: infra/ecs-service.yml not found!"
             exit 1
           fi
 
@@ -84,6 +89,6 @@ jobs:
           IMAGE_URI=282378667470.dkr.ecr.us-west-2.amazonaws.com/slack-cicd-demo:${{ github.sha }}
           aws cloudformation deploy \
             --stack-name slack-cicd-stack \
-            --template-file infra/ecs-service.yml \
+            --template-file ./infra/ecs-service.yml \
             --capabilities CAPABILITY_NAMED_IAM \
             --parameter-overrides ContainerImage=$IMAGE_URI
