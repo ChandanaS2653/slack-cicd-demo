@@ -2,8 +2,8 @@ name: CI-CD Pipeline
 
 on:
   push:
-    branches: [ "main" ]   # runs when code is pushed to main
-  workflow_dispatch:        # allows manual trigger (we'll use this for Slack later)
+    branches: [ "main" ]
+  workflow_dispatch:   # allows manual trigger
 
 jobs:
   build:
@@ -27,5 +27,39 @@ jobs:
       - name: Build Docker image
         run: docker build -t slack-cicd-demo .
 
-      - name: Run Docker container (test locally)
-        run: docker run -d -p 3000:3000 slack-cicd-demo
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: arn:aws:iam::<YOUR_ACCOUNT_ID>:role/GitHubActionsECRRole
+          aws-region: us-west-2
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region us-west-2 | \
+          docker login --username AWS --password-stdin 282378667470.dkr.ecr.us-west-2.amazonaws.com
+
+      - name: Build, Tag, and Push image to ECR
+        run: |
+          IMAGE_URI=<YOUR_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/slack-cicd-demo:${{ github.sha }}
+          docker build -t $IMAGE_URI .
+          docker push $IMAGE_URI
+
+  deploy:
+    name: Deploy to ECS
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: arn:aws:iam::<YOUR_ACCOUNT_ID>:role/GitHubActionsECRRole
+          aws-region: us-west-2
+
+      - name: Deploy CloudFormation stack
+        run: |
+          IMAGE_URI=<YOUR_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/slack-cicd-demo:${{ github.sha }}
+          aws cloudformation deploy \
+            --stack-name slack-cicd-stack \
+            --template-file infra/ecs-service.yml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides ContainerImage=$IMAGE_URI
