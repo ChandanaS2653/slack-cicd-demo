@@ -1,0 +1,31 @@
+name: CI-CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]   # runs when code is pushed to main
+  workflow_dispatch:        # allows manual trigger (we'll use this for Slack later)
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build Docker image
+        run: docker build -t slack-cicd-demo .
+
+      - name: Run Docker container (test locally)
+        run: docker run -d -p 3000:3000 slack-cicd-demo
