@@ -1,5 +1,10 @@
 name: CI-CD Pipeline
 
+# Permissions for OIDC and repo access
+permissions:
+  id-token: write
+  contents: read
+
 on:
   push:
     branches: [ "main" ]
@@ -24,7 +29,7 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Build Docker image
+      - name: Build Docker image locally
         run: docker build -t slack-cicd-demo .
 
       - name: Configure AWS credentials
@@ -48,6 +53,7 @@ jobs:
     name: Deploy to ECS
     needs: build
     runs-on: ubuntu-latest
+
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
