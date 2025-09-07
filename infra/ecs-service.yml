@@ -69,19 +69,24 @@ jobs:
 
       - name: Debug template path
         run: |
-          echo "Current directory: $(pwd)"
-          ls -la
-          ls -la infra
-          if [ ! -f infra/ecs-service.yml ]; then
-            echo "WARNING: infra/ecs-service.yml not found. Skipping deploy."
-            exit 0
-          fi
+          echo "Current directory: $GITHUB_WORKSPACE"
+          echo "Root files:"
+          ls -la $GITHUB_WORKSPACE
+          echo "Infra folder contents:"
+          ls -la $GITHUB_WORKSPACE/infra
 
       - name: Deploy CloudFormation stack
         run: |
+          TEMPLATE_PATH="$GITHUB_WORKSPACE/infra/ecs-service.yml"
+          if [ ! -f "$TEMPLATE_PATH" ]; then
+            echo "ecs-service.yml not found. Skipping deploy."
+            exit 0
+          fi
+
           IMAGE_URI=282378667470.dkr.ecr.us-west-2.amazonaws.com/slack-cicd-demo:${{ github.sha }}
+          echo "Deploying CloudFormation stack with template: $TEMPLATE_PATH"
           aws cloudformation deploy \
             --stack-name slack-cicd-stack \
-            --template-file infra/ecs-service.yml \
+            --template-file "$TEMPLATE_PATH" \
             --capabilities CAPABILITY_NAMED_IAM \
             --parameter-overrides ContainerImage=$IMAGE_URI
