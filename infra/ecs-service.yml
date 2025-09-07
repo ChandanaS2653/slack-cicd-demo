@@ -1,58 +1,87 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: ECS Fargate Service for Slack CI/CD Demo
+name: CI-CD Pipeline
 
-Parameters:
-  ContainerImage:
-    Type: String
-    Description: Docker image URI
+permissions:
+  id-token: write
+  contents: read
 
-Resources:
-  Cluster:
-    Type: AWS::ECS::Cluster
-    Properties:
-      ClusterName: slack-cicd-cluster
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
 
-  TaskExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: slack-cicd-task-execution
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-  TaskDefinition:
-    Type: AWS::ECS::TaskDefinition
-    Properties:
-      Family: slack-cicd-task
-      Cpu: '256'
-      Memory: '512'
-      NetworkMode: awsvpc
-      RequiresCompatibilities: [FARGATE]
-      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
-      ContainerDefinitions:
-        - Name: slack-cicd-container
-          Image: !Ref ContainerImage
-          PortMappings:
-            - ContainerPort: 3000
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-  Service:
-    Type: AWS::ECS::Service
-    Properties:
-      Cluster: !Ref Cluster
-      DesiredCount: 1
-      LaunchType: FARGATE
-      TaskDefinition: !Ref TaskDefinition
-      NetworkConfiguration:
-        AwsvpcConfiguration:
-          AssignPublicIp: ENABLED
-          Subnets:
-            - subnet-08e1b60b2f592fddf
-            - subnet-0c4fbee4f301bc8ae
-          SecurityGroups:
-            - sg-04923c14cae573189
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build Docker image locally
+        run: docker build -t slack-cicd-demo .
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: arn:aws:iam::282378667470:role/GitHubActionsECRRole
+          aws-region: us-west-2
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region us-west-2 | \
+          docker login --username AWS --password-stdin 282378667470.dkr.ecr.us-west-2.amazonaws.com
+
+      - name: Build, Tag, and Push image to ECR
+        run: |
+          IMAGE_URI=282378667470.dkr.ecr.us-west-2.amazonaws.com/slack-cicd-demo:${{ github.sha }}
+          docker build -t $IMAGE_URI .
+          docker push $IMAGE_URI
+
+  deploy:
+    name: Deploy to ECS
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v3
+        with:
+          role-to-assume: arn:aws:iam::282378667470:role/GitHubActionsECRRole
+          aws-region: us-west-2
+
+      - name: Debug template path
+        run: |
+          echo "Current directory: $(pwd)"
+          ls -la
+          ls -la infra
+          if [ ! -f infra/ecs-service.yml ]; then
+            echo "WARNING: infra/ecs-service.yml not found. Skipping deploy."
+            exit 0
+          fi
+
+      - name: Deploy CloudFormation stack
+        run: |
+          IMAGE_URI=282378667470.dkr.ecr.us-west-2.amazonaws.com/slack-cicd-demo:${{ github.sha }}
+          aws cloudformation deploy \
+            --stack-name slack-cicd-stack \
+            --template-file infra/ecs-service.yml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides ContainerImage=$IMAGE_URI
