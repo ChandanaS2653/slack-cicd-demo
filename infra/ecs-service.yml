@@ -4,7 +4,7 @@ deploy:
   runs-on: ubuntu-latest
 
   steps:
-    # ✅ Checkout code in this job
+    # ✅ Checkout repository in this job
     - name: Checkout repository
       uses: actions/checkout@v4
 
@@ -15,16 +15,19 @@ deploy:
         role-to-assume: arn:aws:iam::282378667470:role/GitHubActionsECRRole
         aws-region: us-west-2
 
-    # ✅ Debug to verify template exists
-    - name: Verify infra folder
+    # ✅ Debug: verify template exists
+    - name: List repo contents
       run: |
-        ls -R
+        echo "Root folder:"
+        ls -la
+        echo "infra folder:"
+        ls -la infra
         if [ ! -f infra/ecs-service.yml ]; then
           echo "ERROR: ecs-service.yml not found"
           exit 1
         fi
 
-    # ✅ Deploy CloudFormation stack
+    # ✅ Deploy CloudFormation
     - name: Deploy CloudFormation stack
       run: |
         IMAGE_URI=282378667470.dkr.ecr.us-west-2.amazonaws.com/slack-cicd-demo:${{ github.sha }}
