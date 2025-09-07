@@ -30,7 +30,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
         with:
-          role-to-assume: arn:aws:iam::<YOUR_ACCOUNT_ID>:role/GitHubActionsECRRole
+          role-to-assume: arn:aws:iam::282378667470:role/GitHubActionsECRRole
           aws-region: us-west-2
 
       - name: Login to Amazon ECR
@@ -40,7 +40,7 @@ jobs:
 
       - name: Build, Tag, and Push image to ECR
         run: |
-          IMAGE_URI=<YOUR_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/slack-cicd-demo:${{ github.sha }}
+          IMAGE_URI=282378667470.dkr.ecr.us-west-2.amazonaws.com/slack-cicd-demo:${{ github.sha }}
           docker build -t $IMAGE_URI .
           docker push $IMAGE_URI
 
@@ -52,12 +52,12 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v3
         with:
-          role-to-assume: arn:aws:iam::<YOUR_ACCOUNT_ID>:role/GitHubActionsECRRole
+          role-to-assume: arn:aws:iam::282378667470:role/GitHubActionsECRRole
           aws-region: us-west-2
 
       - name: Deploy CloudFormation stack
         run: |
-          IMAGE_URI=<YOUR_ACCOUNT_ID>.dkr.ecr.us-west-2.amazonaws.com/slack-cicd-demo:${{ github.sha }}
+          IMAGE_URI=282378667470.dkr.ecr.us-west-2.amazonaws.com/slack-cicd-demo:${{ github.sha }}
           aws cloudformation deploy \
             --stack-name slack-cicd-stack \
             --template-file infra/ecs-service.yml \
